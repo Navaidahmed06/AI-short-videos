@@ -1,10 +1,23 @@
 import os
 import pickle
+import socket
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+
+def _find_free_port():
+    """Return an available port number on localhost.
+    Using port=0 with run_local_server usually works, but explicitly
+    finding a free port avoids clashes on Windows when a previous
+    server hasn't released the port yet.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
 
 def upload_to_youtube(video_path, title, description):
     creds = None
@@ -17,8 +30,13 @@ def upload_to_youtube(video_path, title, description):
         flow = InstalledAppFlow.from_client_secrets_file(
             "credentials.json", SCOPES
         )
-        # Use a fixed port that matches the registered redirect URI
-        creds = flow.run_local_server(port=8000)
+        # pick a free port instead of hardcoding to avoid socket errors
+        port = _find_free_port()
+        try:
+            creds = flow.run_local_server(port=port)
+        except OSError as exc:
+            # fallback: let the library pick any available port
+            creds = flow.run_local_server(port=0)
 
         with open("token.pickle", "wb") as token:
             pickle.dump(creds, token)
